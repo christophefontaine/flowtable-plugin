@@ -17,10 +17,13 @@
 #include <vppinfra/error.h>
 #include <vnet/vnet.h>
 #include <vnet/ip/ip.h>
+#include <vppinfra/pool.h>
+#include <vppinfra/bihash_8_8.h>
 
 
 #define foreach_flowtable_error				\
- _(THRU, "Flowtable packets gone thru")
+ _(THRU, "Flowtable packets gone thru") \
+ _(FLOW_COUNT, "Flowtable Flow count") 
 
 typedef enum {
 #define _(sym,str) FLOWTABLE_ERROR_##sym,
@@ -37,12 +40,34 @@ typedef struct {
   u16 sig_len;
   u8 signature[16];
 
-  u8 flow_data[0];
+  u64 last_ts;
+  struct {
+    u32 straight;
+    u32 reverse;
+  } packet_stats;
+
+  union {
+	struct {
+	    u32 SYN:1;
+	    u32 SYN_ACK:1;
+	    u32 SYN_ACK_ACK:1;
+
+	    u32 FIN:1;
+	    u32 FIN_ACK:1;
+	    u32 FIN_ACK_ACK:1;
+	
+	    u32 last_seq_number, last_ack_number;
+	};
+        u8 flow_data[0];
+  };
 } flow_info_t;
 
 typedef struct {
   /* pool of flows */
   flow_info_t *flows;
+  /* hashtable */
+  BVT(clib_bihash) flows_ht;
+  
 
   /* convenience */
   vlib_main_t *vlib_main;
@@ -52,5 +77,8 @@ typedef struct {
 } flowtable_main_t;
 
 flowtable_main_t flowtable_main;
+
+#define FM_NUM_BUCKETS 4
+#define FM_MEMORY_SIZE (256<<16)
 
 extern vlib_node_registration_t flowtable_node;

@@ -143,10 +143,18 @@ vlib_plugin_register (vlib_main_t * vm, vnet_plugin_handoff_t * h,
 
 static clib_error_t * flowtable_init (vlib_main_t * vm)
 {
-  clib_error_t * error = 0; 
-#if 0
+  clib_error_t * error = 0;
   flowtable_main_t *fm = &flowtable_main;
 
+  /* TODO get flow count from configuration */
+
+  flow_info_t *flow;
+  pool_get_aligned(fm->flows, flow, CLIB_CACHE_LINE_BYTES);
+  pool_put(fm->flows, flow);
+
+  BV(clib_bihash_init) (&fm->flows_ht, "flow hash table",
+                        FM_NUM_BUCKETS, FM_MEMORY_SIZE);
+#if 0
   vlib_node_t * l2_input_node = vlib_get_node_by_name(vm, (u8 *)"l2-input");
   ASSERT(l2_input_node);
 
