@@ -23,10 +23,14 @@ vppplugins_LTLIBRARIES = flowtable_plugin.la
 
 flowtable_plugin_la_SOURCES = \
 	flowtable/flowtable.c \
-	flowtable/flowtable_node.c
+	flowtable/flowtable_node.c \
+	flowtable/loadbalancer.c \
+	flowtable/loadbalancer_node.c \
+	flowtable/nodes_registration.c
 
 nobase_include_HEADERS = \
-	flowtable/flowtable.h
+	flowtable/flowtable.h \
+	flowtable/loadbalancer.h
 
 BUILT_SOURCES =
 
