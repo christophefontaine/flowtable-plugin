@@ -57,6 +57,9 @@ static uword load_balance (vlib_main_t *vm,
             /* stats */
 	    pkts_processed ++;
 
+	    
+
+
 	    /* frame mgmt */
 	    from++;
 	    to_next ++;

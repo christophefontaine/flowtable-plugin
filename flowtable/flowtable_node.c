@@ -6,6 +6,7 @@ vlib_node_registration_t flowtable_node;
 typedef enum {
   FT_NEXT_DROP,
   FT_NEXT_ETHERNET_INPUT,
+  FT_NEXT_LOAD_BALANCER,
   FT_NEXT_N_NEXT
 } flowtable_next_t;
 
@@ -72,59 +73,72 @@ static uword get_flowinfo (vlib_main_t *vm,
 	    /* Get Flow & copy metadatas into opaque1 or opaque2 */
 	    ethernet_header_t *eth0 = (void *) (b0->data + b0->current_data);
             type = clib_net_to_host_u16(eth0->type);
-            vlib_buffer_advance (b0, sizeof (ethernet_header_t));
-	    ip4_header_t *ip0 = vlib_buffer_get_current(b0);
-	    ip4_address_t ip_src = ip0->src_address;
-	    ip4_address_t ip_dst = ip0->dst_address;
-	    
-	    udp_header_t *udp0 = ip4_next_header (ip0);
-	    tcp_header_t *tcp0 =  (tcp_header_t *) udp0;
-	    u16 port_src = 0, port_dst = 0;
+            if (type == ETHERNET_TYPE_IP6 || type == ETHERNET_TYPE_IP4) {
+		    vlib_buffer_advance (b0, sizeof (ethernet_header_t));
+		    ip4_header_t *ip0 = vlib_buffer_get_current(b0);
+		    //ip6_header_t *ip60 = vlib_buffer_get_current(b0);
+		    ip4_address_t ip_src = ip0->src_address;
+		    ip4_address_t ip_dst = ip0->dst_address;
+		    // ip6_address_t ip6_src = ip60->src_address;
+		    // ip6_address_t ip6_dst = ip60->dst_address;
+		    
+		    udp_header_t *udp0 = ip4_next_header (ip0);
+		    tcp_header_t *tcp0 =  (tcp_header_t *) udp0;
+		    u16 port_src = 0, port_dst = 0;
 
-	    if (ip0->protocol == IP_PROTOCOL_UDP ) {
-		port_src = udp0->src_port;
-		port_dst = udp0->dst_port;
-	    } else if (ip0->protocol == IP_PROTOCOL_TCP) {
-		port_src = tcp0->ports.src;
-		port_dst = tcp0->ports.dst;
-	    }
+		    if (ip0->protocol == IP_PROTOCOL_UDP ) {
+			port_src = udp0->src_port;
+			port_dst = udp0->dst_port;
+		    } else if (ip0->protocol == IP_PROTOCOL_TCP) {
+			port_src = tcp0->ports.src;
+			port_dst = tcp0->ports.dst;
+		    }
 
-	    (void)type;
-	    
-	    /* compute 5 tuple key so that 2 half connections 
-             * get into the same flow */
-	    if (ip_src.as_u32 < ip_dst.as_u32) {
-	        kv.key = hash4(ip_src, ip_dst, ip0->protocol, port_src, port_dst);
-	    } else {
-		is_reverse = 1;
-	        kv.key = hash4(ip_dst, ip_src, ip0->protocol, port_dst, port_src);
-	    }
+		    /* compute 5 tuple key so that 2 half connections 
+		     * get into the same flow */
+		    if (type == ETHERNET_TYPE_IP6) {
+			
+		    } else {
+			    if (ip_src.as_u32 < ip_dst.as_u32) {
+				kv.key = hash4(ip_src, ip_dst, ip0->protocol, port_src, port_dst);
+			    } else {
+				is_reverse = 1;
+				kv.key = hash4(ip_dst, ip_src, ip0->protocol, port_dst, port_src);
+			    }
+		    }
 
-	    
-	    if (BV(clib_bihash_search) (&fm->flows_ht, &kv, &kv)) {
-		pool_get_aligned(fm->flows, flow, CLIB_CACHE_LINE_BYTES);
-                /// TODO: we MUST use vec_add_x1 and compare to the signature
-		kv.value = pointer_to_uword(flow); 
-		BV(clib_bihash_add_del) (&fm->flows_ht, &kv, 1 /* is_add */);
-		memset(flow, 0, sizeof(*flow));
-		flow->hash = kv.key;
-  		vlib_node_increment_counter(vm, flowtable_node.index, 
-					    FLOWTABLE_ERROR_FLOW_CREATE, 1 );
-	    } else {
-	    	flow = uword_to_pointer(kv.value, flow_info_t*);
-  		vlib_node_increment_counter(vm, flowtable_node.index, 
-					    FLOWTABLE_ERROR_FLOW_HIT, 1 );
-	    }
-	    if (ip0->protocol == IP_PROTOCOL_TCP) {
-		/// TODO: Check TCP State machine
-	    }
+		    
+		    if (BV(clib_bihash_search) (&fm->flows_ht, &kv, &kv)) {
+			pool_get_aligned(fm->flows, flow, CLIB_CACHE_LINE_BYTES);
+			/// TODO: we MUST use vec_add_x1 and compare to the signature
+			kv.value = pointer_to_uword(flow); 
+			BV(clib_bihash_add_del) (&fm->flows_ht, &kv, 1 /* is_add */);
+			memset(flow, 0, sizeof(*flow));
+			flow->hash = kv.key;
+			vlib_node_increment_counter(vm, flowtable_node.index, 
+						    FLOWTABLE_ERROR_FLOW_CREATE, 1 );
+		    } else {
+			flow = uword_to_pointer(kv.value, flow_info_t*);
+			vlib_node_increment_counter(vm, flowtable_node.index, 
+						    FLOWTABLE_ERROR_FLOW_HIT, 1 );
+		    }
+		    if (ip0->protocol == IP_PROTOCOL_TCP) {
+			/// TODO: Check TCP State machine
+		    }
 
-	    if(is_reverse) {
-		flow->packet_stats.reverse++;
-	    } else {
-		flow->packet_stats.straight++;
+		    if(is_reverse) {
+			flow->packet_stats.reverse++;
+		    } else {
+			flow->packet_stats.straight++;
+		    }
+		    flow->last_ts = current_time;
+		    if (flow->offloaded) {
+			next0 = flow->cached_next_node;
+			clib_memcpy(b0->opaque, flow->flow_data, CLIB_CACHE_LINE_BYTES);
+		    } else {
+			
+		    }
 	    }
-	    flow->last_ts = current_time;
 
             /* stats */
 	    pkts_processed ++;
@@ -171,6 +185,7 @@ VLIB_REGISTER_NODE(flowtable_node) = {
   .next_nodes = {
     [FT_NEXT_DROP] = "error-drop",
     [FT_NEXT_ETHERNET_INPUT] = "ethernet-input",
+    [FT_NEXT_LOAD_BALANCER] = "load-balance",
   }
 };
 

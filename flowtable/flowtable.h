@@ -36,6 +36,10 @@ typedef enum {
 typedef struct {
   /* monotonic increasing flow counter */
   u64 hash;
+
+  u32 cached_next_node;
+  u16 offloaded;
+
   u16 sig_len;
   union {
       struct {
@@ -57,6 +61,8 @@ typedef struct {
     u32 reverse;
   } packet_stats;
 
+  /* the following union will be copied to opaque1 
+   * it MUST be less or equal CLIB_CACHE_LINE_BYTES */
   union {
 	struct {
 	    u32 SYN:1;
@@ -69,7 +75,7 @@ typedef struct {
 	
 	    u32 last_seq_number, last_ack_number;
 	};
-        u8 flow_data[0];
+        u8 flow_data[CLIB_CACHE_LINE_BYTES];
   };
 } flow_info_t;
 
@@ -93,3 +99,6 @@ flowtable_main_t flowtable_main;
 #define FM_MEMORY_SIZE (256<<16)
 
 extern vlib_node_registration_t flowtable_node;
+
+int flowtable_enable_disable (flowtable_main_t *fm,
+                              u32 sw_if_index, int enable_disable);

@@ -21,7 +21,9 @@ void vl_api_rpc_call_main_thread (void *fp, u8 * data, u32 data_length);
 
 
 int loadbalancer_set_targets(loadbalancer_main_t* lb, u32 sw_if_index_source, u32 * sw_if_index_targets) {
-  // vec_foreach();
+  u32 *sw_if_index;
+  vec_foreach(sw_if_index, sw_if_index_targets) {
+  }
   return 0;
 }
 
@@ -35,8 +37,9 @@ set_lb_target_command_fn (vlib_main_t * vm,
   u32 sw_if_index = ~0;
   u32 sw_if_index_source = ~0;
   u32 *sw_if_index_targets = NULL;
+  u32 *v;
   int source = 1;
-  vec_validate(sw_if_index_targets, 4);
+  vec_validate(sw_if_index_targets, 10);
 
   int rv;
 
@@ -62,7 +65,9 @@ set_lb_target_command_fn (vlib_main_t * vm,
   }
   
   rv = flowtable_enable_disable(fm, sw_if_index_source, 1);
-
+  vec_foreach(v, sw_if_index_targets) {
+    rv = flowtable_enable_disable(fm, *v, 1);
+  }
   switch(rv) {
     case 0: break;
     case VNET_API_ERROR_INVALID_SW_IF_INDEX: return clib_error_return(0, "Invalid interface");
@@ -87,11 +92,3 @@ VLIB_CLI_COMMAND(set_interface_loadbalanced_command) = {
   .function = set_lb_target_command_fn,
 };
 
-/*
-VLIB_CLI_COMMAND(clear_interface_loadbalanced_command) = {
-  .path = "clear interface loadbalanced",
-  .short_help = 
-  "clear interface loadbalanced <interface>",
-  .function = clear_lb_target_command_fn,
-};
-*/

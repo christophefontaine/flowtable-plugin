@@ -17,48 +17,6 @@
 #include <vnet/plugin/plugin.h>
 
 
-#if 0
-static clib_error_t *
-sixrd_del_domain_command_fn (vlib_main_t *vm,
-			   unformat_input_t *input,
-			   vlib_cli_command_t *cmd)
-{
-  unformat_input_t _line_input, *line_input = &_line_input;
-  u32 num_m_args = 0;
-  u32 sixrd_domain_index;
-
-  /* Get a line of input. */
-  if (! unformat_user(input, unformat_line_input, line_input))
-    return 0;
- 
-  while (unformat_check_input(line_input) != UNFORMAT_END_OF_INPUT) {
-    if (unformat(line_input, "index %d", &sixrd_domain_index))
-      num_m_args++;
-    else
-      return clib_error_return(0, "unknown input `%U'",
-				format_unformat_error, input);
-  }
-  unformat_free(line_input);
-
-  if (num_m_args != 1)
-    return clib_error_return(0, "mandatory argument(s) missing");
-
-  sixrd_delete_domain(sixrd_domain_index);
-
-  return 0;
-}
-
-
-VLIB_CLI_COMMAND(sixrd_del_command, static) = {
-  .path = "sixrd del domain",
-  .short_help = 
-  "sixrd del domain index <domain>",
-  .function = sixrd_del_domain_command_fn,
-};
-
-#endif
-
-
 int flowtable_enable_disable (flowtable_main_t *fm,
 			      u32 sw_if_index, int enable_disable)
 {
@@ -111,58 +69,3 @@ VLIB_CLI_COMMAND(flowtable_interface_enable_disable_command) = {
   .function = flowtable_enable_disable_command_fn,
 };
 
-
-/*
-VLIB_CLI_COMMAND(flowtable_enable_disable_command, static) = {
-  .path = "flowtable node",
-  .short_help = 
-  "flowtable node <node> [disable]",
-  .function = flowtable_enable_disable_command_fn,
-};
-*/
-
-
-/* 
- * This routine exists to convince the vlib plugin framework that
- * we haven't accidentally copied a random .dll into the plugin directory.
- *
- * Also collects global variable pointers passed from the vpp engine
- */
-clib_error_t * 
-vlib_plugin_register (vlib_main_t * vm, vnet_plugin_handoff_t * h,
-                      int from_early_init)
-{
-  clib_error_t * error = 0;
-  flowtable_main_t *mm = &flowtable_main;
-
-  mm->vnet_main = vnet_get_main();
-  mm->vlib_main = vm;
-
-  return error;
-}
-
-static clib_error_t * flowtable_init (vlib_main_t * vm)
-{
-  clib_error_t * error = 0;
-  flowtable_main_t *fm = &flowtable_main;
-
-  /* TODO get flow count from configuration */
-
-  flow_info_t *flow;
-  pool_get_aligned(fm->flows, flow, CLIB_CACHE_LINE_BYTES);
-  pool_put(fm->flows, flow);
-
-  BV(clib_bihash_init) (&fm->flows_ht, "flow hash table",
-                        FM_NUM_BUCKETS, FM_MEMORY_SIZE);
-#if 0
-  vlib_node_t * l2_input_node = vlib_get_node_by_name(vm, (u8 *)"l2-input");
-  ASSERT(l2_input_node);
-
-  fm->ethernet_input_next_index = vlib_node_add_next(vm, 
-                                          l2_input_node->index,
-                                          flowtable_node.index);
-#endif
-  return error;
-}
-
-VLIB_INIT_FUNCTION (flowtable_init);
