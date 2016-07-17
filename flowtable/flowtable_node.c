@@ -107,10 +107,13 @@ static uword get_flowinfo (vlib_main_t *vm,
 		kv.value = pointer_to_uword(flow); 
 		BV(clib_bihash_add_del) (&fm->flows_ht, &kv, 1 /* is_add */);
 		memset(flow, 0, sizeof(*flow));
+		flow->hash = kv.key;
   		vlib_node_increment_counter(vm, flowtable_node.index, 
-					    FLOWTABLE_ERROR_FLOW_COUNT, 1 );
+					    FLOWTABLE_ERROR_FLOW_CREATE, 1 );
 	    } else {
 	    	flow = uword_to_pointer(kv.value, flow_info_t*);
+  		vlib_node_increment_counter(vm, flowtable_node.index, 
+					    FLOWTABLE_ERROR_FLOW_HIT, 1 );
 	    }
 	    if (ip0->protocol == IP_PROTOCOL_TCP) {
 		/// TODO: Check TCP State machine

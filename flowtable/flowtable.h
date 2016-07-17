@@ -23,7 +23,8 @@
 
 #define foreach_flowtable_error				\
  _(THRU, "Flowtable packets gone thru") \
- _(FLOW_COUNT, "Flowtable Flow count") 
+ _(FLOW_CREATE, "Flowtable packets which created a new flow") \
+ _(FLOW_HIT, "Flowtable packets with an existing flow") 
 
 typedef enum {
 #define _(sym,str) FLOWTABLE_ERROR_##sym,
@@ -35,10 +36,20 @@ typedef enum {
 typedef struct {
   /* monotonic increasing flow counter */
   u64 hash;
-  u64 flow_id;
-
   u16 sig_len;
-  u8 signature[16];
+  union {
+      struct {
+	ip6_address_t src, dst;
+	u8 proto;
+	u16 port_src, port_dst;
+      }ip6;
+      struct {
+	ip4_address_t src, dst;
+	u8 proto;
+	u16 port_src, port_dst;
+      }ip4;
+      u8 data[32];
+  } signature;
 
   u64 last_ts;
   struct {
