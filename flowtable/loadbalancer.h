@@ -30,7 +30,6 @@ typedef enum {
    LOADBALANCER_N_ERROR
  } loadbalancer_error_t;
 
-
 typedef struct {
 
   /* convenience */
@@ -38,6 +37,16 @@ typedef struct {
   vnet_main_t *vnet_main;
 
 } loadbalancer_main_t;
+
+typedef struct {
+  loadbalancer_main_t *lbm;
+  
+  u32 sw_if_index_source;
+  u32 *sw_if_target;
+
+  u32 last_target_index;
+
+}loadbalancer_runtime_t;
 
 loadbalancer_main_t loadbalancer_main;
 

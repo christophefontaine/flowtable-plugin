@@ -33,6 +33,16 @@ typedef enum {
    FLOWTABLE_N_ERROR
  } flowtable_error_t;
 
+
+typedef enum {
+  FT_NEXT_DROP,
+  FT_NEXT_ETHERNET_INPUT,
+  FT_NEXT_LOAD_BALANCER,
+  FT_NEXT_INTERFACE_OUTPUT,
+  FT_NEXT_N_NEXT
+} flowtable_next_t;
+
+
 typedef struct {
   /* monotonic increasing flow counter */
   u64 hash;
@@ -61,7 +71,7 @@ typedef struct {
     u32 reverse;
   } packet_stats;
 
-  /* the following union will be copied to opaque1 
+  /* the following union will be copied to vlib->opaque
    * it MUST be less or equal CLIB_CACHE_LINE_BYTES */
   union {
 	struct {
@@ -74,9 +84,18 @@ typedef struct {
 	    u32 FIN_ACK_ACK:1;
 	
 	    u32 last_seq_number, last_ack_number;
-	};
+	}tcp;
+
+        struct {
+	    uword flow_info_ptr;
+	    u32 sw_if_index_dst;
+	    u32 sw_if_index_rev;
+            u32 sw_if_index_current;
+        }lb;
+
         u8 flow_data[CLIB_CACHE_LINE_BYTES];
   };
+
 } flow_info_t;
 
 typedef struct {

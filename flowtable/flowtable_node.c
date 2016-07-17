@@ -3,18 +3,12 @@
 
 vlib_node_registration_t flowtable_node;
 
-typedef enum {
-  FT_NEXT_DROP,
-  FT_NEXT_ETHERNET_INPUT,
-  FT_NEXT_LOAD_BALANCER,
-  FT_NEXT_N_NEXT
-} flowtable_next_t;
-
 
 typedef struct {
   u64 hash;
   u32 sw_if_index;
   u32 next_index;
+  u32 offloaded;
 } flow_trace_t;
 
 
@@ -23,9 +17,9 @@ static u8 * format_get_flowinfo(u8 *s, va_list *args) {
   CLIB_UNUSED (vlib_node_t * node) = va_arg (*args, vlib_node_t *);
   flow_trace_t *t = va_arg(*args, flow_trace_t*);
 
-  s = format(s, "FlowInfo - sw_if_index %d, hash = 0x%x, next_index = %d",
+  s = format(s, "FlowInfo - sw_if_index %d, hash = 0x%x, next_index = %d, offload = %d",
 			t->sw_if_index,
-			t->hash, t->next_index);
+			t->hash, t->next_index, t->offloaded);
   return s;
 }
 
@@ -61,7 +55,7 @@ static uword get_flowinfo (vlib_main_t *vm,
 
     /* Single loop */
     while (n_left_from > 0 && n_left_to_next > 0) {
-	    flow_info_t *flow;
+	    flow_info_t *flow = NULL;
 	    uword is_reverse = 0;
 	    BVT(clib_bihash_kv) kv;
 
@@ -69,6 +63,7 @@ static uword get_flowinfo (vlib_main_t *vm,
 	    next0 = FT_NEXT_ETHERNET_INPUT;
 	    pi0 = to_next[0] = from[0];
 	    b0 = vlib_get_buffer(vm, pi0);
+	    u32 sw_if_index0 = vnet_buffer(b0)->sw_if_index[VLIB_RX];
 
 	    /* Get Flow & copy metadatas into opaque1 or opaque2 */
 	    ethernet_header_t *eth0 = (void *) (b0->data + b0->current_data);
@@ -135,14 +130,23 @@ static uword get_flowinfo (vlib_main_t *vm,
 		    if (flow->offloaded) {
 			next0 = flow->cached_next_node;
 			clib_memcpy(b0->opaque, flow->flow_data, CLIB_CACHE_LINE_BYTES);
+
+			/* Send pkt back out the RX interface */
+		        if (sw_if_index0 == flow->lb.sw_if_index_dst)
+				vnet_buffer(b0)->sw_if_index[VLIB_TX] = flow->lb.sw_if_index_rev;
+			else
+				vnet_buffer(b0)->sw_if_index[VLIB_TX] = flow->lb.sw_if_index_dst;
 		    } else {
-			
+			flow->lb.sw_if_index_current = sw_if_index0;
+			*(flow_info_t**)b0->opaque = flow;
+			next0 = FT_NEXT_LOAD_BALANCER;
+
 		    }
 	    }
+            vlib_buffer_reset(b0);
 
             /* stats */
 	    pkts_processed ++;
-            vlib_buffer_reset(b0);
 
 	    /* frame mgmt */
 	    from++;
@@ -153,8 +157,12 @@ static uword get_flowinfo (vlib_main_t *vm,
 	    if (b0->flags & VLIB_BUFFER_IS_TRACED) {
 		flow_trace_t *t = vlib_add_trace(vm, node, b0, sizeof(*t));
 		t->hash = kv.key;
-		t->sw_if_index = vnet_buffer(b0)->sw_if_index[VLIB_RX];
+		t->sw_if_index = sw_if_index0;
 		t->next_index = next0;
+                if (flow)
+	                t->offloaded = flow->offloaded;
+		else
+	                t->offloaded = 0;
 	    }
 
 	    vlib_validate_buffer_enqueue_x1(vm, node, next_index, to_next, n_left_to_next, pi0, next0);
@@ -186,6 +194,7 @@ VLIB_REGISTER_NODE(flowtable_node) = {
     [FT_NEXT_DROP] = "error-drop",
     [FT_NEXT_ETHERNET_INPUT] = "ethernet-input",
     [FT_NEXT_LOAD_BALANCER] = "load-balance",
+    [FT_NEXT_INTERFACE_OUTPUT] = "interface-output",
   }
 };
 

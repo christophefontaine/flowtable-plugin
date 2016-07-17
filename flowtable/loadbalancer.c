@@ -19,10 +19,17 @@
 
 void vl_api_rpc_call_main_thread (void *fp, u8 * data, u32 data_length);
 
-
-int loadbalancer_set_targets(loadbalancer_main_t* lb, u32 sw_if_index_source, u32 * sw_if_index_targets) {
+int loadbalancer_set_targets(loadbalancer_main_t* lb,
+			     u32 sw_if_index_source, 
+			     u32 * sw_if_index_targets) 
+{
   u32 *sw_if_index;
+  loadbalancer_runtime_t *rt = vlib_node_get_runtime_data (lb->vlib_main, loadbalancer_node.index);
+  // loadbalancer_runtime_t *rt = &g_rt;
+
+  rt->sw_if_index_source = sw_if_index_source;
   vec_foreach(sw_if_index, sw_if_index_targets) {
+    vec_add1(rt->sw_if_target, *sw_if_index);
   }
   return 0;
 }
@@ -39,7 +46,7 @@ set_lb_target_command_fn (vlib_main_t * vm,
   u32 *sw_if_index_targets = NULL;
   u32 *v;
   int source = 1;
-  vec_validate(sw_if_index_targets, 10);
+//  vec_validate(sw_if_index_targets, 10);
 
   int rv;
 
